@@ -7,7 +7,7 @@
  *   · dsh-windows-notify-plugin-<version>.zip —— 完整源码包(含 install.mjs/README)
  * @module dsh-windows-notify/pack
  */
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,16 +37,19 @@ if (!existsSync(packed)) {
   console.error("[pack] 未找到 npm pack 产物");
   process.exit(1);
 }
-// 移动到 dist
 rmSync(tgzOut, { force: true });
-run("cmd.exe", ["/c", "move", "/y", packed, tgzOut], PKG_DIR);
+renameSync(packed, tgzOut); // 跨平台移动(避免依赖 cmd.exe)
 console.log(`[pack] npm 归档:${tgzOut}`);
 
-// 2) 完整源码 zip(bsdtar -a;排除 node_modules 与 dist)
+// 2) 完整源码 zip(排除 node_modules 与 dist;Windows 用 bsdtar -a,其余用 zip)
 const zipOut = join(DIST, `dsh-windows-notify-plugin-${version}.zip`);
 rmSync(zipOut, { force: true });
 const parent = dirname(PKG_DIR);
 const entry = basename(PKG_DIR);
-run("tar", ["-a", "-c", "-f", resolve(zipOut), "--exclude=node_modules", "--exclude=dist", "-C", parent, entry]);
+if (process.platform === "win32") {
+  run("tar", ["-a", "-c", "-f", resolve(zipOut), "--exclude=node_modules", "--exclude=dist", "-C", parent, entry]);
+} else {
+  run("zip", ["-r", resolve(zipOut), entry, "-x", `${entry}/node_modules/*`, `${entry}/dist/*`], parent);
+}
 console.log(`[pack] 源码包:${zipOut}`);
 console.log("[pack] 完成。dist 目录内容可直接上传。");
