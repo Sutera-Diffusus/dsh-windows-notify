@@ -65,8 +65,8 @@ dsh plugin --profile web add dsh-windows-notify
 ## 架构 / How it works
 
 - **`cordis.patch.yml`** — bundle 补丁层,向 profile 组合插入一行 `dsh-notify`(单包双面 `dsh.bundle` + `dsh.client`)。
-- **宿主半边 `lib/index.js`** — `agent/status` 事件(回合结束)→ 完成通知(过滤子代理与 goal 自动续跑);包装 `userQuestions.ask()` → 决策提醒 + 角标 ±1;`installSettingsSection` 注册命名空间 `dsh-notify`;`webServer.register` 注册 `/api/dsh-notify/preview` 试听路由;旧 apply-patch 钩子共存守卫。
-- **浏览器半边 `lib/client.js`** — 手写 `__ModuleLoader__` 工厂(零构建步骤),设置页「通知」区段经 `settingsScope` 读写同一命名空间。
+- **宿主半边 `lib/index.js`** — `agent/status` 事件(回合结束)→ 完成通知(过滤子代理与 goal 自动续跑);包装 `userQuestions.ask()` → 决策提醒 + 角标 ±1;`ctx.settings.register` 注册命名空间 `dsh-notify`(持久化到 `$DSH_HOME/settings.yaml`,schema 校验);`webServer.register` 注册 `GET/POST /api/dsh-notify/config`(设置页读写)与 `/api/dsh-notify/preview`(试听);旧 apply-patch 钩子共存守卫。
+- **浏览器半边 `lib/client.js`** — 手写 `__ModuleLoader__` 工厂(零构建步骤),设置页「通知」区段经插件自有 HTTP 路由读写配置(DSH rc.6 的 apiproxy 只暴露白名单 settings 命名空间,第三方命名空间须走自有路由,详见 CHANGELOG 1.1.0)。
 - **通知内核 `lib/notify-core.js`** — Toast/托盘脚本经 Base64 JSON 载荷传递(Windows spawn 不转义参数)、PowerShell 绝对路径、不用 detached/unref、全程 best-effort。
 - **脚本** — `toast.ps1`(WinRT Toast + SoundPlayer.PlaySync + 免打扰/系统勿扰静音)、`tray.ps1`(NotifyIcon 角标 + 端口看门狗 + 按端口独立锁)。
 
@@ -75,6 +75,7 @@ dsh plugin --profile web add dsh-windows-notify
 - 配置存于 DSH 托管设置文档(`$DSH_HOME/settings.yaml` 的 `dsh-notify` 节);
 - 运行状态(托盘角标计数、调试日志)仅写本机 `$DSH_HOME/dsh-windows-notify/`;
 - **不联网、无遥测、不读取任何凭据**;仅 `install.mjs --legacy-root` 在还原旧补丁时从 npm registry 拉取同版本官方包;
+- 插件注册两条本机 HTTP 路由:`/api/dsh-notify/config`(设置页读/写配置,仅同源可访问)与 `/api/dsh-notify/preview`(试听);不向外部发送任何数据;
 - 纯 Windows:非 win32 平台所有提醒自动跳过。
 
 ## 已知限制 / Known limitations

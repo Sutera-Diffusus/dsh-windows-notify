@@ -2,6 +2,12 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式,版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.1.0] - 2026-08-16
+
+### Changed
+
+- 设置页配置传输改走插件自有 HTTP 路由 `GET/POST /api/dsh-notify/config`:DSH rc.6 的 apiproxy 只对白名单命名空间(`WEB_SETTINGS_NAMESPACES`)暴露 settings 描述,第三方命名空间在浏览器侧不可见(此前表现为设置页一直「加载中…」)。配置仍持久化在 `$DSH_HOME/settings.yaml` 的 `dsh-notify` 节并经 schema 校验;宿主零补丁。
+
 ## [1.0.2] - 2026-08-16
 
 ### Fixed
