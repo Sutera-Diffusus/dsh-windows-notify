@@ -49,7 +49,7 @@ check(pkg.dsh?.bundle?.patch === "./cordis.patch.yml", "声明 dsh.bundle.patch"
 check(pkg.dsh?.client?.platform === "web", "声明 dsh.client(web)");
 check(typeof pkg.exports?.["./client"] === "string" && existsSync(join(ROOT, pkg.exports["./client"])), "exports ./client 指向存在的文件");
 check(typeof pkg.exports?.["./cordis.patch.yml"] === "string" && existsSync(join(ROOT, pkg.exports["./cordis.patch.yml"])), "exports ./cordis.patch.yml 指向存在的文件");
-check(pkg.version === "1.1.0", "版本 1.1.0");
+check(pkg.version === "1.1.1", "版本 1.1.1");
 check(pkg.license === "MIT", "许可证 MIT");
 
 // ---- 4. 音频资产 ----

@@ -2,6 +2,12 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式,版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.1.1] - 2026-08-16
+
+### Fixed
+
+- 设置页按钮改用框架 Button 原语(`@deepseek-ai/dsh-client-ui-primitives`,variant primary/outline):此前手写按钮用了主题系统里不存在的 `--dsw-alias-label-on-accent` 令牌,亮色主题下按钮文字与底色对比度不足、颜色发飘;现在与设置页其他控件完全一致,亮暗主题对比度均由框架保证。
+
 ## [1.1.0] - 2026-08-16
 
 ### Changed
