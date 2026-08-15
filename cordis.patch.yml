@@ -1,0 +1,15 @@
+# dsh-windows-notify bundle patch —— 把 Windows 提醒叠加到 profile 组合上。
+#
+# 单包双面(dsh.bundle + dsh.client):
+#   `dsh-notify` 一行同时是:
+#     · 宿主插件(worker 侧):监听 agent/status 完成事件、包装 userQuestions 提问入口、
+#       注册 settings 命名空间 dsh-notify、注册 /api/dsh-notify/preview 试听路由、
+#       惰性启动托盘进程与 Toast/SoundPlayer 脚本;
+#     · 浏览器插件(dsh.client):设置页「通知」区段(提示音 / 打扰控制 / 完成通知),
+#       经 settingsScope 读写同一命名空间,保存即生效(宿主热加载,无需重启)。
+#
+# 零侵入:不修改任何内置包文件;DSH 升级后只需重跑 install.mjs。
+
+- insert:
+    - id: dsh-notify
+      name: dsh-windows-notify

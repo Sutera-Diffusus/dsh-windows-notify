@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 构建并发布 Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node test.mjs
+      - run: node pack.mjs
+      - name: 生成 SHA256SUMS
+        working-directory: dist
+        run: sha256sum dsh-windows-notify-*.tgz dsh-windows-notify-plugin-*.zip > SHA256SUMS.txt
+      - name: 创建 GitHub Release(资产 + 校验和)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            dist/dsh-windows-notify-*.tgz \
+            dist/dsh-windows-notify-plugin-*.zip \
+            dist/SHA256SUMS.txt \
+            --title "dsh-windows-notify ${{ github.ref_name }}" \
+            --notes-from-tag

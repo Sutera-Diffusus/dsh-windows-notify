@@ -1,0 +1,30 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# 构建产物(分发资产只走 GitHub Release)
+dist/
+*.tgz
+*.zip
+
+# 环境与临时文件
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+
+# 本地开发杂物
+.dsh/
+profiles/
+backup/
+tmp/
+
+# 通用发布卫生(体检规则)
+target/
+releases/
+.toolchain/
+*.db
+*.exe
+*.msi

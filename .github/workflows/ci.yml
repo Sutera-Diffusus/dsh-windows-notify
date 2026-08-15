@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    name: 校验与打包 (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node test.mjs
+      - run: node pack.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  powershell:
+    name: PowerShell 脚本解析
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 解析全部 .ps1(语法错误即失败)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $errors = 0
+          Get-ChildItem -Recurse -Filter *.ps1 | Where-Object { $_.FullName -notlike "*\node_modules\*" } | ForEach-Object {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            foreach ($e in $parseErrors) {
+              Write-Host "::error file=$($_.FullName)::$($e.Message)"
+              $errors++
+            }
+          }
+          if ($errors -gt 0) { Write-Host "::error::$errors PowerShell 解析错误"; exit 1 }
+          Write-Host "全部 PowerShell 脚本解析通过"
