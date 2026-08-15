@@ -2,6 +2,13 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式,版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.0.1] - 2026-08-16
+
+### Fixed
+
+- 免打扰时段仅在设置开关 `quietHours.enabled` 打开时生效(此前只要处于 22:00–08:00 时段就静音,即使开关关闭)。
+- 设置页「试听」现在是主动动作:忽略静音配置与免打扰时段,点击必定播放。
+
 ## [1.0.0] - 2026-08-15
 
 首个公开版本:从 apply-patch 扩展重写为 DSH 原生 profile 插件(零侵入)。
