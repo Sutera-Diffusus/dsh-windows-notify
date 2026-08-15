@@ -2,6 +2,12 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式,版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.0.2] - 2026-08-16
+
+### Fixed
+
+- 设置页「通知」区段渲染崩溃:`useSyncExternalStore` 的 `subscribe`/`getSnapshot` 之前裸传(丢失 `this`),区段打开即空白;现改为箭头包装(与官方插件同款写法)。
+
 ## [1.0.1] - 2026-08-16
 
 ### Fixed

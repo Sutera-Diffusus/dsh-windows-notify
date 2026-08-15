@@ -1,7 +1,7 @@
 {
   "name": "dsh-windows-notify",
   "description": "Windows-grade notifications for DeepSeek Harness: system toasts, custom sounds, and a taskbar tray badge for task completion and decision prompts — a native DSH profile plugin (bundle + client + settings namespace), zero patching of built-in packages.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publishConfig": {
     "access": "public"
   },
