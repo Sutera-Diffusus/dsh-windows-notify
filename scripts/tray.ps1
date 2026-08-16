@@ -1,4 +1,4 @@
-﻿# DSH taskbar bubble badge v3: no extra tray icon.
+# DSH taskbar bubble badge v3: no extra tray icon.
 # Spawned by notify-core with -PayloadB64 (JSON: stateFile, port, url, lockFile, installRoot).
 # Draws a crisp red bubble with a white number as the native taskbar overlay on
 # the DSH desktop window button (ITaskbarList3, 4x supersampled for high-DPI).
@@ -76,7 +76,7 @@ try { $p = [int]$payload.port; if ($p -gt 0 -and $p -lt 65536) { $dsPort = $p } 
 $lockFile = [string]$payload.lockFile
 if ($stateFile -eq "") { exit 0 }
 if ($lockFile -eq "") { $lockFile = Join-Path $env:TEMP "dshnotify-tray.lock" }
-$logFile = "D:\ai-temp\dsh-tray-badge.log"
+$logFile = Join-Path $env:TEMP "dsh-tray-badge.log"
 
 function Log-Badge([string]$msg) {
   try { Add-Content -Path $logFile -Value ("{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"), $msg) -Encoding UTF8 } catch { }

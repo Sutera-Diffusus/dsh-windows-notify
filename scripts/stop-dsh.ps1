@@ -2,16 +2,17 @@
 # 1. Finds every listener on the target ports and kills its process tree.
 # 2. Kills known DSH wrapper processes (launcher, bin-guard, dsh bin.js, balance-proxy).
 # 3. Waits until the ports are actually released, then force-kills any straggler.
-# 4. Clears tray lock/state leftovers and writes a result line to D:\ai-temp\dsh-stop.log.
+# 4. Clears tray lock/state leftovers and writes a result line to %TEMP%\dsh-stop.log.
 # ASCII-only comments and log text on purpose: this script may be read as ANSI by Windows PowerShell 5.1.
 param(
     [int[]]$Ports = @(),
     [string]$InstallRoot = "",
     [int]$WaitSeconds = 8,
-    [string]$LogFile = "D:\ai-temp\dsh-stop.log"
+    [string]$LogFile = ""
 )
 
 $ErrorActionPreference = "SilentlyContinue"
+if ([string]::IsNullOrEmpty($LogFile)) { $LogFile = Join-Path $env:TEMP "dsh-stop.log" }
 
 function Write-StopLog {
     param([string]$Message)
@@ -149,11 +150,10 @@ foreach ($proc in $stillAlive) {
 }
 
 # 5. Clean tray lock files and reset tray badge state (never touches session data).
-$stateFiles = @(
-    "D:\DeepseekHarness_WorkSpace\dsh-windows-notify-extension\tray-state.json",
-    "D:\DeepseekHarness_Data\.dsh\dsh-windows-notify\tray-state.json",
-    "D:\DeepseekHarness_Test_Data\.dsh\dsh-windows-notify\tray-state.json"
-)
+$stateFiles = @()
+if ($env:DSH_HOME) {
+    $stateFiles += (Join-Path $env:DSH_HOME "dsh-windows-notify\tray-state.json")
+}
 foreach ($file in $stateFiles) {
     try {
         if (Test-Path $file) {
@@ -162,7 +162,7 @@ foreach ($file in $stateFiles) {
     } catch { }
 }
 try {
-    Get-ChildItem -Path "D:\ai-temp" -Filter "dshnotify-tray*.lock" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    Get-ChildItem -Path $env:TEMP -Filter "dshnotify-tray*.lock" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 } catch { }
 
 # 6. Report and exit nonzero when a port is still occupied.

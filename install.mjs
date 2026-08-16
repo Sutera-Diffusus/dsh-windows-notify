@@ -2,7 +2,7 @@
 /**
  * dsh-windows-notify 接线脚本(幂等,可重复执行)。
  *
- *   node install.mjs [--profile <name>] [--dsh-home <dir>]
+ *   node install.mjs [--profile <name>] [--dsh-home <dir>] [--install-dir <dir>]
  *                    [--uninstall] [--keep-legacy] [--legacy-root <dir>]
  *
  * 安装时:
@@ -42,12 +42,10 @@ const UNINSTALL = args.includes("--uninstall");
 const KEEP_LEGACY = args.includes("--keep-legacy");
 const PROFILE = flag("--profile", "web");
 
-/** Resolve the current DSH data home: explicit arg > launcher cfg > DSH_HOME env > OS home fallback. */
+/** Resolve the current DSH data home: explicit arg > launcher cfg (--install-dir or DSH_INSTALL_DIR env) > DSH_HOME env > OS home fallback. */
 function launcherDshHome() {
-  const candidates = [
-    "D:\\Deepseek harness\\DeepSeekHarness-Launcher.cfg",
-    "D:\\DeepseekHarness_Test\\DeepSeekHarness-Launcher.cfg",
-  ];
+  const installDir = flag("--install-dir", process.env.DSH_INSTALL_DIR || "");
+  const candidates = installDir ? [join(installDir, "DeepSeekHarness-Launcher.cfg")] : [];
   for (const cfg of candidates) {
     try {
       const text = readFileSync(cfg, "utf8");
