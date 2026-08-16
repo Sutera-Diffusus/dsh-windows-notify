@@ -41,7 +41,27 @@ const flag = (name, fallback) => {
 const UNINSTALL = args.includes("--uninstall");
 const KEEP_LEGACY = args.includes("--keep-legacy");
 const PROFILE = flag("--profile", "web");
-const DSH_HOME = flag("--dsh-home", process.env.DSH_HOME || join(homedir(), ".dsh"));
+
+/** Resolve the current DSH data home: explicit arg > launcher cfg > DSH_HOME env > OS home fallback. */
+function launcherDshHome() {
+  const candidates = [
+    "D:\\Deepseek harness\\DeepSeekHarness-Launcher.cfg",
+    "D:\\DeepseekHarness_Test\\DeepSeekHarness-Launcher.cfg",
+  ];
+  for (const cfg of candidates) {
+    try {
+      const text = readFileSync(cfg, "utf8");
+      const line = text.split(/\r?\n/).find((item) => /^\s*dshHome\s*=/.test(item));
+      if (line !== undefined) {
+        const value = line.split("=").slice(1).join("=").trim();
+        if (value !== "") return value;
+      }
+    } catch { /* missing cfg is fine */ }
+  }
+  return "";
+}
+
+const DSH_HOME = flag("--dsh-home", "") || launcherDshHome() || process.env.DSH_HOME || join(homedir(), ".dsh");
 const LEGACY_ROOT = flag("--legacy-root", ""); // 仅在从旧版 apply-patch 扩展迁移时指定
 const LEGACY_CONFIG = flag("--legacy-config", resolve(dirname(PKG_DIR), "config.json"));
 const PROFILE_DIR = join(DSH_HOME, "profiles", PROFILE);
