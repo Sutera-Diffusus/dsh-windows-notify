@@ -1,6 +1,6 @@
 # dsh-windows-notify
 
-**Windows 级提醒,随 DeepSeek Harness 而来。** Windows-grade notifications for DeepSeek Harness — system toasts, custom sounds, and a taskbar tray badge for task completion and decision prompts, installed as a **native DSH profile plugin** (zero patching of built-in packages).
+**Windows 级提醒,随 DeepSeek Harness 而来。** Windows-grade notifications for DeepSeek Harness — system toasts, custom sounds, and a crisp taskbar bubble badge (no extra tray icon) for pending decisions and unread completions, installed as a **native DSH profile plugin** (zero patching of built-in packages).
 
 ![promo](docs/promo.png)
 
@@ -68,7 +68,7 @@ dsh plugin --profile web add dsh-windows-notify
 - **宿主半边 `lib/index.js`** — `agent/status` 事件(回合结束)→ 完成通知(过滤子代理与 goal 自动续跑);包装 `userQuestions.ask()` → 决策提醒 + 角标 ±1;`ctx.settings.register` 注册命名空间 `dsh-notify`(持久化到 `$DSH_HOME/settings.yaml`,schema 校验);`webServer.register` 注册 `GET/POST /api/dsh-notify/config`(设置页读写)与 `/api/dsh-notify/preview`(试听);旧 apply-patch 钩子共存守卫。
 - **浏览器半边 `lib/client.js`** — 手写 `__ModuleLoader__` 工厂(零构建步骤),设置页「通知」区段经插件自有 HTTP 路由读写配置(DSH rc.6 的 apiproxy 只暴露白名单 settings 命名空间,第三方命名空间须走自有路由,详见 CHANGELOG 1.1.0)。
 - **通知内核 `lib/notify-core.js`** — Toast/托盘脚本经 Base64 JSON 载荷传递(Windows spawn 不转义参数)、PowerShell 绝对路径、不用 detached/unref、全程 best-effort。
-- **脚本** — `toast.ps1`(WinRT Toast + SoundPlayer.PlaySync + 免打扰/系统勿扰静音)、`tray.ps1`(NotifyIcon 角标 + 端口看门狗 + 按端口独立锁)。
+- **脚本** — `toast.ps1`(WinRT Toast + SoundPlayer.PlaySync + 免打扰/系统勿扰静音)、`tray.ps1`(任务栏气泡角标:ITaskbarList3 原生 overlay,4x 超采样抗高 DPI 模糊;端口看门狗 + 按端口独立锁 + 窗口前台自动清未读)。
 
 ## 数据与隐私 / Data & privacy
 

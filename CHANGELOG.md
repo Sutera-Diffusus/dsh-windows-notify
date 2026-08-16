@@ -2,6 +2,14 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式,版本遵循 [SemVer](https://semver.org/lang/zh-CN/)。
 
+## [1.2.0] - 2026-08-17
+
+### Changed
+
+- 托盘图标改为任务栏气泡角标:不再额外创建系统托盘图标,而是在 DSH 桌面窗口的任务栏按钮上叠加红色数字气泡(ITaskbarList3 原生 overlay);气泡以 4x 超采样绘制,高 DPI 下依然锐利;气泡从无到有时任务栏闪烁提醒。
+- 气泡语义:待处理 + 已完成未读计数;DSH 窗口切到前台自动清除未读(原托盘点击职责)。
+- tray.ps1 改为 payload 参数化形式(stateFile/port/lockFile 由 notify-core 传入),保留端口看门狗与按端口独立锁。
+
 ## [1.1.1] - 2026-08-16
 
 ### Fixed

@@ -1,38 +1,88 @@
-﻿# DSH tray badge (plugin form): taskbar tray icon with a red count badge.
-# Count = pending decisions + completed-but-unviewed tasks.
-# Click the icon: opens the DSH GUI and marks completed items as read.
-# Payload (Base64 JSON, -PayloadB64): { stateFile, port, url, lockFile }
-#   - stateFile: tray-state.json path under $DSH_HOME/dsh-windows-notify
-#   - port:      the DSH webServer port (watchdog + open URL)
-#   - url:       the GUI URL the icon opens
-#   - lockFile:  per-port single-instance lock (instances do not fight)
-# The tray exits by itself when the DSH host stops listening on port.
-# Pure ASCII comments; user-facing strings are Chinese literals (file must be UTF-8 BOM).
+﻿# DSH taskbar bubble badge v3: no extra tray icon.
+# Spawned by notify-core with -PayloadB64 (JSON: stateFile, port, url, lockFile, installRoot).
+# Draws a crisp red bubble with a white number as the native taskbar overlay on
+# the DSH desktop window button (ITaskbarList3, 4x supersampled for high-DPI).
+# Hidden when count = 0; exits by itself when the DSH host port stops listening.
+# Unread items are auto-cleared when the DSH window becomes the foreground window.
+# User-facing strings are Chinese; file must be UTF-8 with BOM.
 param([string]$PayloadB64 = "")
 $ErrorActionPreference = "SilentlyContinue"
+Add-Type -AssemblyName System.Drawing
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class TrayNative {
+  [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr handle);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [StructLayout(LayoutKind.Sequential)] public struct FLASHWINFO { public uint cbSize; public IntPtr hwnd; public uint dwFlags; public uint uCount; public uint dwTimeout; }
+  [DllImport("user32.dll")] public static extern bool FlashWindowEx(ref FLASHWINFO pfwi);
+}
+[ComImport, Guid("EA1AFB91-9E28-4B86-90E9-9E9F8A5EEFAF"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface ITaskbarList3 {
+  void HrInit();
+  void AddTab(IntPtr hwnd);
+  void DeleteTab(IntPtr hwnd);
+  void ActivateTab(IntPtr hwnd);
+  void SetActiveAlt(IntPtr hwnd);
+  void MarkFullscreenWindow(IntPtr hwnd, [MarshalAs(UnmanagedType.Bool)] bool fFullscreen);
+  void SetProgressValue(IntPtr hwnd, ulong ullCompleted, ulong ullTotal);
+  void SetProgressState(IntPtr hwnd, int tbpFlags);
+  void RegisterTab(IntPtr hwndTab, IntPtr hwndMDI);
+  void UnregisterTab(IntPtr hwndTab);
+  void SetTabOrder(IntPtr hwndTab, IntPtr hwndInsertBefore);
+  void SetTabActive(IntPtr hwndTab, IntPtr hwndMDI, uint dwReserved);
+  void ThumbBarAddButtons(IntPtr hwnd, uint cButtons, IntPtr pButton);
+  void ThumbBarUpdateButtons(IntPtr hwnd, uint cButtons, IntPtr pButton);
+  void ThumbBarSetImageList(IntPtr hwnd, IntPtr himl);
+  void SetOverlayIcon(IntPtr hwnd, IntPtr hIcon, [MarshalAs(UnmanagedType.LPWStr)] string pszDescription);
+  void SetThumbnailTooltip(IntPtr hwnd, [MarshalAs(UnmanagedType.LPWStr)] string pszTip);
+  void SetThumbnailClip(IntPtr hwnd, IntPtr prcClip);
+  void SetTabProperties(IntPtr hwndTab, int stpFlags);
+  void SetJumpList(IntPtr hwnd, IntPtr pJumpList);
+}
+public static class TrayOverlay {
+  private static ITaskbarList3 _tlb;
+  private static bool _ready;
+  [DllImport("ole32.dll")] public static extern int CoCreateInstance(ref Guid clsid, IntPtr pUnkOuter, uint dwClsContext, ref Guid iid, out IntPtr ppv);
+  public static void Init() {
+    if (_ready) return;
+    Guid clsid = new Guid("56FDF344-FD6D-11d0-958A-006097C9A090");
+    Guid iid = typeof(ITaskbarList3).GUID;
+    IntPtr ppv;
+    int hr = CoCreateInstance(ref clsid, IntPtr.Zero, 1, ref iid, out ppv);
+    if (hr < 0) throw new Exception("CoCreateInstance failed 0x" + hr.ToString("X8"));
+    _tlb = (ITaskbarList3)Marshal.GetObjectForIUnknown(ppv);
+    _tlb.HrInit();
+    _ready = true;
+  }
+  public static bool Available() { return _ready; }
+  public static void SetOverlay(long hwnd, long hIcon, string desc) {
+    if (!_ready) return;
+    _tlb.SetOverlayIcon(new IntPtr(hwnd), new IntPtr(hIcon), desc);
+  }
+}
+'@
 
-$payload = $null
+$payload = @{}
 if ($PayloadB64 -ne "") {
   try {
     $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PayloadB64))
     $payload = $json | ConvertFrom-Json
   } catch { }
 }
-if ($null -eq $payload) { exit 0 }
-
 $stateFile = [string]$payload.stateFile
-$port      = [int]$payload.port
-$url       = [string]$payload.url
-$lockFile  = [string]$payload.lockFile
-if ($stateFile -eq "" -or $port -le 0) { exit 0 }
-if ($url -eq "") { $url = "http://127.0.0.1:$port" }
+$dsPort = 3080
+try { $p = [int]$payload.port; if ($p -gt 0 -and $p -lt 65536) { $dsPort = $p } } catch { }
+$lockFile = [string]$payload.lockFile
+if ($stateFile -eq "") { exit 0 }
 if ($lockFile -eq "") { $lockFile = Join-Path $env:TEMP "dshnotify-tray.lock" }
+$logFile = "D:\ai-temp\dsh-tray-badge.log"
 
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class TrayIconCleanup { [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr handle); }'
+function Log-Badge([string]$msg) {
+  try { Add-Content -Path $logFile -Value ("{0} {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"), $msg) -Encoding UTF8 } catch { }
+}
 
-# single instance guard (per port)
+# single instance guard
 if (Test-Path $lockFile) {
   $existingPid = 0
   try { $existingPid = [int](Get-Content $lockFile -Raw) } catch { }
@@ -40,113 +90,156 @@ if (Test-Path $lockFile) {
 }
 try { [IO.File]::WriteAllText($lockFile, [string]$PID) } catch { }
 
-# icon cache per count (0..99+); HICONs are destroyed once on exit (GDI leak prevention)
-$script:iconCache = @{}
-function New-TrayIcon([int]$Count) {
-  if ($script:iconCache.ContainsKey($Count)) { return $script:iconCache[$Count] }
-  $bmp = New-Object System.Drawing.Bitmap 32, 32
+# taskbar overlay (all COM calls wrapped in C#)
+$script:overlayReady = $false
+try {
+  [TrayOverlay]::Init()
+  $script:overlayReady = [TrayOverlay]::Available()
+  Log-Badge ("overlay COM " + $(if ($script:overlayReady) { "ready" } else { "unavailable" }))
+} catch {
+  Log-Badge ("overlay COM failed: " + $_.Exception.Message)
+}
+
+# red bubble with white number: rendered at 4x supersample (64px) so the
+# taskbar's 16px logical overlay stays crisp on high-DPI displays.
+$script:bubbleCache = @{}
+function New-BubbleIcon([string]$Text, [int]$Size) {
+  $key = "$Size-$Text"
+  if ($script:bubbleCache.ContainsKey($key)) { return $script:bubbleCache[$key] }
+  $S = $Size * 4
+  $bmp = New-Object System.Drawing.Bitmap($S, $S)
   $g = [System.Drawing.Graphics]::FromImage($bmp)
   $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-  $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAlias
-  $blue = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 43, 92, 230))
-  $g.FillEllipse($blue, 3, 3, 26, 26)
-  $white = [System.Drawing.Brushes]::White
-  $g.FillEllipse($white, 12, 12, 8, 8)
-  if ($Count -gt 0) {
-    $red = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 230, 60, 60))
-    $g.FillEllipse($red, 17, 1, 14, 14)
-    $text = if ($Count -gt 99) { "99+" } else { [string]$Count }
-    $font = New-Object System.Drawing.Font "Segoe UI", 8, ([System.Drawing.FontStyle]::Bold)
-    $sf = New-Object System.Drawing.StringFormat
-    $sf.Alignment = [System.Drawing.StringAlignment]::Center
-    $sf.LineAlignment = [System.Drawing.StringAlignment]::Center
-    $rect = New-Object System.Drawing.RectangleF 17, 1, 14, 14
-    $g.DrawString($text, $font, $white, $rect, $sf)
-    $font.Dispose()
-    $sf.Dispose()
-  }
+  $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+  $m = [int][Math]::Max(2, $S * 0.05)
+  $d = $S - 2 * $m
+  $rect = New-Object System.Drawing.RectangleF $m, $m, $d, $d
+  $lg = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect,
+    ([System.Drawing.Color]::FromArgb(255, 255, 107, 94)),
+    ([System.Drawing.Color]::FromArgb(255, 240, 45, 34)),
+    90)
+  $g.FillEllipse($lg, $rect)
+  $lg.Dispose()
+  $fs = [float]($d * 0.62)
+  if ($Text.Length -ge 3) { $fs = [float]($d * 0.42) }   # "99+"
+  elseif ($Text.Length -eq 2) { $fs = [float]($d * 0.5) }
+  $font = New-Object System.Drawing.Font "Segoe UI", $fs, ([System.Drawing.FontStyle]::Bold), ([System.Drawing.GraphicsUnit]::Pixel)
+  # 精确居中(数字字形有侧边距偏差:整体向右上微调补偿)
+  $szf = $g.MeasureString($Text, $font)
+  $tx = [float](($S - $szf.Width) / 2) + [float]($S * 0.03)
+  $ty = [float](($S - $szf.Height) / 2) - [float]($S * 0.02)
+  $g.DrawString($Text, $font, [System.Drawing.Brushes]::White, $tx, $ty)
+  $font.Dispose()
   $g.Dispose()
   $icon = [System.Drawing.Icon]::FromHandle($bmp.GetHicon())
-  $script:iconCache[$Count] = $icon
+  $bmp.Dispose()
+  $script:bubbleCache[$key] = $icon
   return $icon
 }
 
-$notify = New-Object System.Windows.Forms.NotifyIcon
-$notify.Visible = $true
-$notify.Icon = (New-TrayIcon 0)
-
-$menu = New-Object System.Windows.Forms.ContextMenuStrip
-$openItem = New-Object System.Windows.Forms.ToolStripMenuItem
-$openItem.Text = "Open DSH"
-$openItem.Add_Click({ Start-Process $url })
-$exitItem = New-Object System.Windows.Forms.ToolStripMenuItem
-$exitItem.Text = "Exit tray"
-$exitItem.Add_Click({ $notify.Visible = $false; [System.Windows.Forms.Application]::Exit() })
-[void]$menu.Items.Add($openItem)
-[void]$menu.Items.Add($exitItem)
-$notify.ContextMenuStrip = $menu
-
-$script:lastCount = -1
-$script:UpdateIcon = {
+function Get-DshWindow() {
   try {
-    $raw = [IO.File]::ReadAllText($stateFile, [Text.Encoding]::UTF8)
-    $state = $raw | ConvertFrom-Json
-    $pending = 0
-    if ($state.pending) { $pending = [int]$state.pending }
-    $completed = @($state.completed)
-    $total = $pending + $completed.Count
-    if ($total -ne $script:lastCount) {
-      $script:lastCount = $total
-      $notify.Icon = (New-TrayIcon $total)
-      $tip = "DSH - $pending pending, $($completed.Count) unread"
-      $titles = ($completed | ForEach-Object { $_.title } | Where-Object { $_ }) -join ", "
-      if ($titles) { $tip = $tip + "`n" + $titles }
-      if ($tip.Length -gt 120) { $tip = $tip.Substring(0, 120) }
-      $notify.Text = $tip
-    }
+    $p = Get-Process DeepSeekHarness-Launcher -ErrorAction SilentlyContinue |
+         Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+    if ($p) { return $p.MainWindowHandle }
   } catch { }
+  return [IntPtr]::Zero
 }
 
-$timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 1500
-$timer.Add_Tick($script:UpdateIcon)
-$timer.Start()
-& $script:UpdateIcon
-
-# single click = primary action (open GUI + mark read); ignore the duplicate click
-# that a double-click always raises first (community convention: double-click is redundant).
-$script:lastClick = [DateTime]::MinValue
-$notify.Add_Click({
-  $now = Get-Date
-  if (($now - $script:lastClick).TotalMilliseconds -lt 400) { return }
-  $script:lastClick = $now
+$script:lastOverlay = -99
+$script:wasZero = $true
+$script:Update = {
   try {
-    $raw = [IO.File]::ReadAllText($stateFile, [Text.Encoding]::UTF8)
-    $state = $raw | ConvertFrom-Json
-    $state.completed = @()
-    $json = $state | ConvertTo-Json -Depth 5
-    [IO.File]::WriteAllText($stateFile, $json, (New-Object Text.UTF8Encoding($false)))
-  } catch { }
-  Start-Process $url
-})
+    $pending = 0
+    $unread = 0
+    try {
+      $raw = [IO.File]::ReadAllText($stateFile, [Text.Encoding]::UTF8)
+      $state = $raw | ConvertFrom-Json
+      if ($state.pending) { $pending = [int]$state.pending }
+      $unread = @($state.completed).Count
+    } catch { }
+    $total = $pending + $unread
 
-# watchdog: exit when the DSH host stops listening
-$watch = New-Object System.Windows.Forms.Timer
-$watch.Interval = 5000
-$watch.Add_Tick({
-  $alive = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-  if (-not $alive) {
-    $notify.Visible = $false
-    [System.Windows.Forms.Application]::Exit()
+    $hwnd = Get-DshWindow
+
+    # DSH 窗口在前台 = 已读:自动清掉未读计数
+    if ($hwnd -ne [IntPtr]::Zero -and $unread -gt 0) {
+      try {
+        $fg = [TrayNative]::GetForegroundWindow()
+        if ($fg -eq $hwnd) {
+          $raw = [IO.File]::ReadAllText($stateFile, [Text.Encoding]::UTF8)
+          $state = $raw | ConvertFrom-Json
+          if (@($state.completed).Count -gt 0) {
+            $state.completed = @()
+            $json = $state | ConvertTo-Json -Depth 5
+            [IO.File]::WriteAllText($stateFile, $json, (New-Object Text.UTF8Encoding($false)))
+            Log-Badge "unread auto-cleared (window focused)"
+            $unread = 0
+            $total = $pending
+          }
+        }
+      } catch { }
+    }
+
+    if ($hwnd -ne [IntPtr]::Zero) {
+      if ($total -ne $script:lastOverlay) {
+        $script:lastOverlay = $total
+        if ($script:overlayReady) {
+          if ($total -gt 0) {
+            $text = if ($total -gt 99) { "99+" } else { [string]$total }
+            $ico = New-BubbleIcon $text 16
+            [TrayOverlay]::SetOverlay($hwnd.ToInt64(), $ico.Handle.ToInt64(), "$pending 待处理 / $unread 未读")
+            Log-Badge "bubble set count=$total hwnd=$hwnd"
+          } else {
+            [TrayOverlay]::SetOverlay($hwnd.ToInt64(), 0, "")
+            Log-Badge "bubble cleared"
+          }
+        }
+      }
+      if ($script:wasZero -and $total -gt 0) {
+        $fi = New-Object TrayNative+FLASHWINFO
+        $fi.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($fi)
+        $fi.hwnd = $hwnd
+        $fi.dwFlags = 3
+        $fi.uCount = 3
+        $fi.dwTimeout = 0
+        [TrayNative]::FlashWindowEx([ref]$fi) | Out-Null
+        Log-Badge "taskbar flashed"
+      }
+    } else {
+      $script:lastOverlay = -99
+    }
+    $script:wasZero = ($total -eq 0)
+
+    # watchdog: exit when the DSH host stops listening
+    $alive = Get-NetTCPConnection -LocalPort $dsPort -State Listen -ErrorAction SilentlyContinue
+    if (-not $alive) {
+      Log-Badge "host port $dsPort down, exiting"
+      $script:stop = $true
+    }
+  } catch {
+    Log-Badge "update error: $($_.Exception.Message)"
   }
-})
-$watch.Start()
+}
 
-[System.Windows.Forms.Application]::Run()
+& $script:Update
+Log-Badge "bubble badge v3 started pid=$PID port=$dsPort"
 
-# cleanup: destroy cached HICONs (GDI leak prevention), remove lock, dispose
-foreach ($icon in $script:iconCache.Values) {
-  try { [TrayIconCleanup]::DestroyIcon($icon.Handle) | Out-Null; $icon.Dispose() } catch { }
+$script:stop = $false
+while (-not $script:stop) {
+  Start-Sleep -Milliseconds 1500
+  & $script:Update
+}
+
+# cleanup: clear overlay, destroy HICONs, remove lock
+try {
+  if ($script:overlayReady) {
+    $hwnd = Get-DshWindow
+    if ($hwnd -ne [IntPtr]::Zero) { [TrayOverlay]::SetOverlay($hwnd.ToInt64(), 0, "") }
+  }
+} catch { }
+foreach ($icon in $script:bubbleCache.Values) {
+  try { [TrayNative]::DestroyIcon($icon.Handle) | Out-Null; $icon.Dispose() } catch { }
 }
 try { Remove-Item $lockFile -Force -ErrorAction SilentlyContinue } catch { }
-if ($notify) { $notify.Dispose() }
+Log-Badge "bubble badge exited"
