@@ -1,4 +1,4 @@
-# DSH taskbar bubble badge v3: no extra tray icon.
+﻿# DSH taskbar bubble badge v3: no extra tray icon.
 # Spawned by notify-core with -PayloadB64 (JSON: stateFile, port, url, lockFile, installRoot).
 # Draws a crisp red bubble with a white number as the native taskbar overlay on
 # the DSH desktop window button (ITaskbarList3, 4x supersampled for high-DPI).
